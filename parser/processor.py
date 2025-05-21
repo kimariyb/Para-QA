@@ -1,8 +1,6 @@
 import os
-import re
-import requests
 
-from PyPDF2 import DocumentInformation, PdfReader
+from tqdm import tqdm
 
 from magic_pdf.data.data_reader_writer import FileBasedDataReader, FileBasedDataWriter
 from magic_pdf.data.dataset import PymuDocDataset
@@ -11,55 +9,99 @@ from magic_pdf.config.enums import SupportedPdfParseMethod
 
 
 class PDFProcessor(object):
-    def __init__(self):
-        self.noise_patterns = [
-            r'(?is)^\s*(references|acknowledgements|author information|associated content|supporting information)\b[.:]?.*?(?=^\s*\b\w+|$)',
-
-            r'(?i)\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',  
-            r'(?i)\b(http|ftp|https)://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
-            r'(?i)\b(www\.)\S+\b',
-            
-            r'$?\d{4}$?[\s-]?(?:[a-zA-Z]+[\s-]?){0,3}\d*\.?',  # 形如 (2023a) / 2024: 的引用
-            r'(?i)\b(?:fig|figure)\s*[\d.]+[a-zA-Z]?(?:[:-].+)?\.?',  
-            
-            r'(?i)^\s*(?:doi|publisher)\s*:.+$',
-            r'\*+\s*Conflict of Interest\s*\*+.*',
-        ]
-        
-        self.doi_patterns = [
-            r'doi[\s\.\:]{0,2}(10\.\d{4}[\d\:\.\-\/a-z]+)(?:[\s\n\"<]|$)',
-            r'(10\.\d{4}[\d\:\.\-\/a-z]+)(?:[\s\n\"<]|$)',
-            r'(10\.\d{4}[\:\.\-\/a-z]+[\:\.\-\d]+)(?:[\s\na-z\"<]|$)',
-            r'https?://[ -~]*doi[ -~]*/(10\.\d{4,9}/[-._;()/:a-z0-9]+)(?:[\s\n\"<]|$)'
-            r'^(10\.\d{4,9}/[-._;()/:a-z0-9]+)$'
-        ]
-
-    @staticmethod
-    def get_pdf_info(file) -> None | DocumentInformation:
+    def __init__(self, pdf_dir, output_dir, image_subdir, simple_output=True):
+        self.pdf_dir = pdf_dir
+        self.output_dir = output_dir
+        self.image_subdir = image_subdir
+        self.simple_output = simple_output
+    
+    def process_pdf_dir(self):
         r"""
-        Get the information of a pdf file.
+        Process all PDF files in a directory and extract text and images.
+        """
+        md_file_paths = []
+        for file_name in tqdm(os.listdir(self.pdf_dir), desc="Processing PDF files"):
+            if file_name.endswith(".pdf"):
+                pdf_file_path = os.path.join(self.pdf_dir, file_name)
+                md_file_path = self.process_pdf(pdf_file_path, self.output_dir, self.image_subdir, self.simple_output)
+                md_file_paths.append(md_file_path)
+                
+        return md_file_paths
+    
+
+    def process_pdf(self, pdf_file_name, output_dir, image_subdir, simple_output=True):
+        r"""
+        Process a PDF file and extract text and images.
         
         Parameters
         ----------
-        file : str
-            The file path of the pdf file.
+        pdf_file_name : str
+            The path of the PDF file to be processed.
+        output_dir : str
+            The directory to store the extracted text and images.
+        image_subdir : str
+            The subdirectory to store the extracted images.
+        simple_output : bool, optional
+            Whether to output the extracted text in a simple format. Default is True.
         
         Returns
         -------
-        dict
-            The information of the pdf file.
+        str
+            The path of the generated markdown file.
         """
-        try:
-            pdf = PdfReader(file, strict=False)
-        except Exception as e:
-            print(f"It was not possible to open the file with PyPDF2. Is this a valid pdf file?: {e}")
-            return None
+        # 获取不带后缀的文件名
+        name_without_suff = os.path.splitext(os.path.basename(pdf_file_name))[0]
+   
+        # 创建输出子目录名
+        output_subdir = f"{name_without_suff}"
+
+        # 构建图片目录和 markdown 目录的路径
+        local_image_dir = os.path.join(output_dir, output_subdir, image_subdir)
+        local_md_dir = os.path.join(output_dir, output_subdir)
+
+        # 创建必要的目录
+        os.makedirs(local_image_dir, exist_ok=True)
+        os.makedirs(local_md_dir, exist_ok=True)
         
-        try:
-            info = pdf.metadata
-        except Exception as e:
-            print(f"An error occurred when retrieving the pdf info with PyPDF2: {e}")
-            return None
+        # 构建 markdown 文件的完整路径
+        md_file_path = os.path.join(os.getcwd(), local_md_dir, f"{name_without_suff}.md")
+        abs_md_file_path = os.path.abspath(md_file_path)
+
+        # 读取 PDF 文件
+        image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(local_md_dir)
+        # 创建文件读取器并读取 PDF 文件
+        reader1 = FileBasedDataReader("")
+        pdf_bytes = reader1.read(pdf_file_name)
         
-        return info
+        # 创建数据集对象
+        ds = PymuDocDataset(pdf_bytes)
+        # 根据 PDF 类型选择处理方式
+        if ds.classify() == SupportedPdfParseMethod.OCR:
+            # 使用 OCR 模式处理
+            infer_result = ds.apply(doc_analyze, ocr=True)
+            pipe_result = infer_result.pipe_ocr_mode(image_writer)
+        else:
+            # 使用文本模式处理
+            infer_result = ds.apply(doc_analyze, ocr=False)
+            pipe_result = infer_result.pipe_txt_mode(image_writer)
+        
+        if simple_output: 
+            # 简单输出模式：只输出 markdown 和内容列表
+            pipe_result.dump_md(md_writer, f"{name_without_suff}.md", os.path.basename(local_image_dir))
+            pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json",
+                                        os.path.basename(local_image_dir))
+            return abs_md_file_path
+        else:
+            # 完整输出模式：输出所有内容
+            pipe_result.dump_md(md_writer, f"{name_without_suff}.md", os.path.basename(local_image_dir))
+            pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json",
+                                            os.path.basename(local_image_dir))
+        
+        # 生成可视化文件
+        infer_result.draw_model(os.path.join(local_md_dir, f"{name_without_suff}_model.pdf"))
+        pipe_result.draw_layout(os.path.join(local_md_dir, f"{name_without_suff}_layout.pdf"))
+        pipe_result.draw_span(os.path.join(local_md_dir, f"{name_without_suff}_spans.pdf"))
+
+        return abs_md_file_path
+    
     
