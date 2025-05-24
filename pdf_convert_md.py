@@ -1,4 +1,4 @@
-from parser.processor import PDFProcessor
+from utils.parser import PDFProcessor
 
 if __name__ == '__main__':
     pdf_processor = PDFProcessor(
