@@ -2,7 +2,7 @@ import os
 import shutil
 
 from tqdm import tqdm
-from utils.parser import MarkdownProcessor
+
 
 
 def transfer_mineru_files(src_dir, dst_dir):
@@ -26,11 +26,7 @@ def transfer_mineru_files(src_dir, dst_dir):
 
 
 if __name__ == '__main__':
-    # transfer_mineru_files('mineru', 'md')
-   
-    processor = MarkdownProcessor('md', 'output')
-    processor.process_md('./md/10.1002_advs.202207112.md', 'output')
+    transfer_mineru_files('mineru', 'output')   
+    
     print('Done')
-     
-        
-     
+   
