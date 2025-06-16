@@ -177,5 +177,5 @@ data/
 cleaned/
 mineru/
 output/
-tags/
-selected/
+qac_files/
+qac_jsonls/

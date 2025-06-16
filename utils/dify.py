@@ -1,12 +1,11 @@
-import pathlib
-import mimetypes
-import requests
 import uuid
 import json
+import pathlib
+import requests
 
-from codecs import encode
 from abc import ABCMeta, abstractmethod
 from enum import Enum
+from codecs import encode
 
 
 class ResponseMode(Enum):
@@ -21,7 +20,7 @@ class BaseClient(metaclass=ABCMeta):
         self.user = user
     
     @abstractmethod
-    def request(self):
+    def request(self, *args, **kwargs):
         """抽象方法，必须由子类实现具体的请求逻辑"""
         pass
     
@@ -63,7 +62,7 @@ class FileUploadClient(BaseClient):
             return None
         
         # 获取文件类型
-        fileType = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+        fileType = 'application/octet-stream'
                 
         # 生成boundary
         boundary = uuid.uuid4().hex
@@ -132,11 +131,37 @@ class WorkFlowRunClient(BaseClient):
         
         # 发送请求
         response = requests.request("POST", self.base_url, headers=headers, data=data)
+        res = response.json()
+
+        return res
+
+
+class ChatMessageClient(BaseClient):
+    def __init__(self, api_key=None, base_url=None, user=None):
+        super().__init__(api_key, base_url, user)
+        
+    def request(self, message: str):
+        # 构造请求参数
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json',
+        }
+        
+        # 构造请求体
+        data = json.dumps({
+            "inputs": {},
+            "query": message,
+            "conversation_id": "",
+            "response_mode": ResponseMode.BLOCKING.value,
+            "user": self.user,
+            "files": []
+        })
+        
+        # 发送请求
+        response = requests.request("POST", self.base_url, headers=headers, data=data)
         data = json.loads(response.text)
         
-        if data.get("data", {}).get("status") == "succeeded":
-            return data
-        else:
-            return None
+        return data
+
         
 
