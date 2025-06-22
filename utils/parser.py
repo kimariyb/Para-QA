@@ -1,4 +1,6 @@
+import os
 
+from tqdm import tqdm
 
 
 class MarkdownProcessor(object):

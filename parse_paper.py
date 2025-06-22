@@ -18,34 +18,35 @@ from tqdm import tqdm
 
 
 def do_parse(
-    output_dir,  # Output directory for storing parsing results
-    pdf_file_names: list[str],  # List of PDF file names to be parsed
-    pdf_bytes_list: list[bytes],  # List of PDF bytes to be parsed
-    p_lang_list: list[str],  # List of languages for each PDF, default is 'ch' (Chinese)
-    backend="pipeline",  # The backend for parsing PDF, default is 'pipeline'
-    parse_method="auto",  # The method for parsing PDF, default is 'auto'
-    p_formula_enable=True,  # Enable formula parsing
-    p_table_enable=True,  # Enable table parsing
-    server_url=None,  # Server URL for vlm-sglang-client backend
-    f_draw_layout_bbox=True,  # Whether to draw layout bounding boxes
-    f_draw_span_bbox=True,  # Whether to draw span bounding boxes
-    f_dump_md=True,  # Whether to dump markdown files
-    f_dump_middle_json=True,  # Whether to dump middle JSON files
-    f_dump_model_output=True,  # Whether to dump model output files
-    f_dump_orig_pdf=True,  # Whether to dump original PDF files
-    f_dump_content_list=True,  # Whether to dump content list files
-    f_make_md_mode=MakeMode.MM_MD,  # The mode for making markdown content, default is MM_MD
-    start_page_id=0,  # Start page ID for parsing, default is 0
-    end_page_id=None,  # End page ID for parsing, default is None (parse all pages until the end of the document)
+        output_dir,  # Output directory for storing parsing results
+        pdf_file_names: list[str],  # List of PDF file names to be parsed
+        pdf_bytes_list: list[bytes],  # List of PDF bytes to be parsed
+        p_lang_list: list[str],  # List of languages for each PDF, default is 'ch' (Chinese)
+        backend="pipeline",  # The backend for parsing PDF, default is 'pipeline'
+        parse_method="auto",  # The method for parsing PDF, default is 'auto'
+        p_formula_enable=True,  # Enable formula parsing
+        p_table_enable=True,  # Enable table parsing
+        server_url=None,  # Server URL for vlm-sglang-client backend
+        f_draw_layout_bbox=True,  # Whether to draw layout bounding boxes
+        f_draw_span_bbox=True,  # Whether to draw span bounding boxes
+        f_dump_md=True,  # Whether to dump markdown files
+        f_dump_middle_json=True,  # Whether to dump middle JSON files
+        f_dump_model_output=True,  # Whether to dump model output files
+        f_dump_orig_pdf=True,  # Whether to dump original PDF files
+        f_dump_content_list=True,  # Whether to dump content list files
+        f_make_md_mode=MakeMode.MM_MD,  # The mode for making markdown content, default is MM_MD
+        start_page_id=0,  # Start page ID for parsing, default is 0
+        end_page_id=None,  # End page ID for parsing, default is None (parse all pages until the end of the document)
 ):
-
     if backend == "pipeline":
-        for idx, pdf_bytes in tqdm(enumerate(pdf_bytes_list), total=len(pdf_file_names), desc="Convert PDF bytes to bytes..."):
+        for idx, pdf_bytes in tqdm(enumerate(pdf_bytes_list), total=len(pdf_file_names),
+                                   desc="Convert PDF bytes to bytes..."):
             new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, start_page_id, end_page_id)
             pdf_bytes_list[idx] = new_pdf_bytes
 
         infer_results, all_image_lists, all_pdf_docs, lang_list, ocr_enabled_list = pipeline_doc_analyze(
-            pdf_bytes_list, p_lang_list, parse_method=parse_method, formula_enable=p_formula_enable,table_enable=p_table_enable
+            pdf_bytes_list, p_lang_list, parse_method=parse_method, formula_enable=p_formula_enable,
+            table_enable=p_table_enable
         )
 
         for idx, model_list in tqdm(enumerate(infer_results), total=len(infer_results), desc="Infer model..."):
@@ -58,7 +59,8 @@ def do_parse(
             pdf_doc = all_pdf_docs[idx]
             _lang = lang_list[idx]
             _ocr_enable = ocr_enabled_list[idx]
-            middle_json = pipeline_result_to_middle_json(model_list, images_list, pdf_doc, image_writer, _lang, _ocr_enable, p_formula_enable)
+            middle_json = pipeline_result_to_middle_json(model_list, images_list, pdf_doc, image_writer, _lang,
+                                                         _ocr_enable, p_formula_enable)
 
             pdf_info = middle_json["pdf_info"]
 
@@ -115,7 +117,8 @@ def do_parse(
             pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, start_page_id, end_page_id)
             local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, parse_method)
             image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(local_md_dir)
-            middle_json, infer_result = vlm_doc_analyze(pdf_bytes, image_writer=image_writer, backend=backend, server_url=server_url)
+            middle_json, infer_result = vlm_doc_analyze(pdf_bytes, image_writer=image_writer, backend=backend,
+                                                        server_url=server_url)
 
             pdf_info = middle_json["pdf_info"]
 
@@ -164,20 +167,20 @@ def do_parse(
 
 
 def parse_doc(
-    path_list: list[Path],
-    output_dir,
-    lang="ch",
-    backend="pipeline",
-    method="auto",
-    server_url=None,
-    start_page_id=0,  # Start page ID for parsing, default is 0
-    end_page_id=None  # End page ID for parsing, default is None (parse all pages until the end of the document)
+        path_list: list[Path],
+        output_dir,
+        lang="ch",
+        backend="pipeline",
+        method="auto",
+        server_url=None,
+        start_page_id=0,  # Start page ID for parsing, default is 0
+        end_page_id=None  # End page ID for parsing, default is None (parse all pages until the end of the document)
 ):
     try:
         file_name_list = []
         pdf_bytes_list = []
         lang_list = []
-        for path in path_list:
+        for path in tqdm(path_list, desc="Loading PDF files"):
             file_name = str(Path(path).stem)
             pdf_bytes = read_fn(path)
             file_name_list.append(file_name)
@@ -207,14 +210,38 @@ if __name__ == '__main__':
     # args
     __dir__ = os.path.dirname(os.path.abspath(__file__))
     pdf_files_dir = os.path.join(__dir__, "data")
-    output_dir = os.path.join(__dir__, "mineru")
-    pdf_suffixes = [".pdf"]
-    image_suffixes = [".png", ".jpeg", ".jpg"]
+    output_dir = os.path.join(__dir__, "output")
 
-    doc_path_list = []
-    for doc_path in Path(pdf_files_dir).glob('*'):
-        if doc_path.suffix in pdf_suffixes + image_suffixes:
-            doc_path_list.append(doc_path)
+    # total_pdf_files, using the file name
+    total_pdf_files = []
+    for pdf_file in os.listdir(pdf_files_dir):
+        if pdf_file.endswith(".pdf"):
+            total_pdf_files.append(pdf_file)
 
-    """Use pipeline mode if your environment does not support VLM"""
-    parse_doc(doc_path_list, output_dir, lang="en", backend="vlm-sglang-engine")
+    # parsed_pdf_files
+    parsed_pdf_files = []
+    # get the output_dir's folder
+    for folder in os.listdir(output_dir):
+        if os.path.isdir(os.path.join(output_dir, folder)):
+            parsed_pdf_file = f"{folder}.pdf"
+            parsed_pdf_files.append(parsed_pdf_file)
+
+    # using set to remove parsed files
+    pdf_files_to_parse = list(set(total_pdf_files) - set(parsed_pdf_files))
+
+    doc_path_list = [
+        doc for doc in Path(pdf_files_dir).iterdir()
+        if doc.is_file() and doc.name in pdf_files_to_parse
+    ]
+
+    print("The total pdf files to parse: ", len(pdf_files_to_parse))
+
+    # sort the doc_path_list by name
+    doc_path_list.sort(key=lambda x: x.name)
+
+    parse_doc(
+        doc_path_list,
+        output_dir,
+        lang="en",
+        backend="vlm-sglang-engine"
+    )

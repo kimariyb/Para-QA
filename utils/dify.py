@@ -134,7 +134,48 @@ class WorkFlowRunClient(BaseClient):
         res = response.json()
 
         return res
+    
+    def get_info(self, id):
+        # 构造请求参数
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+        }
+        
+        # 发送请求
+        response = requests.request(
+            "GET", 
+            f"{self.base_url}/{id}", 
+            headers=headers
+        )
+        
+        res = response.json()
 
+        return res
+    
+    
+class WorkFlowLogClient(BaseClient):
+    def __init__(self, api_key=None, base_url=None, user=None):
+        super().__init__(api_key, base_url, user)
+        
+    def request(self, page, limit):
+        # 构造请求参数
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+        }
+        
+        # 构建 url
+        log_url = f"{self.base_url}?page={page}&limit={limit}"
+        
+        # 发送请求
+        response = requests.request(
+            "GET", log_url, headers=headers
+        )
+            
+        res = response.json()
+
+        return res
+    
+    
 
 class ChatMessageClient(BaseClient):
     def __init__(self, api_key=None, base_url=None, user=None):
