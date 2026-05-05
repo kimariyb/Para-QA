@@ -174,8 +174,5 @@ cython_debug/
 .pypirc
 
 data/
-cleaned/
 mineru/
-output/
-qac_files/
 logs/

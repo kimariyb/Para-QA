@@ -35,10 +35,10 @@ class MarkdownProcessor(object):
         
     
     def process_md(self, md_file_name, output_dir): 
-        # create output directory
+        # create mineru directory
         os.makedirs(output_dir, exist_ok=True)
         
-        # create output file path
+        # create mineru file path
         name_without_suff = os.path.splitext(os.path.basename(md_file_name))[0]
         output_path = os.path.join(output_dir, f"{name_without_suff}_cleaned.md")
         

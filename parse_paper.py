@@ -31,7 +31,7 @@ def do_parse(
         f_draw_span_bbox=True,  # Whether to draw span bounding boxes
         f_dump_md=True,  # Whether to dump markdown files
         f_dump_middle_json=True,  # Whether to dump middle JSON files
-        f_dump_model_output=True,  # Whether to dump model output files
+        f_dump_model_output=True,  # Whether to dump model mineru files
         f_dump_orig_pdf=True,  # Whether to dump original PDF files
         f_dump_content_list=True,  # Whether to dump content list files
         f_make_md_mode=MakeMode.MM_MD,  # The mode for making markdown content, default is MM_MD
@@ -105,7 +105,7 @@ def do_parse(
                     json.dumps(model_json, ensure_ascii=False, indent=4),
                 )
 
-            logger.info(f"local output dir is {local_md_dir}")
+            logger.info(f"local mineru dir is {local_md_dir}")
     else:
         if backend.startswith("vlm-"):
             backend = backend[4:]
@@ -163,7 +163,7 @@ def do_parse(
                     model_output,
                 )
 
-            logger.info(f"local output dir is {local_md_dir}")
+            logger.info(f"local mineru dir is {local_md_dir}")
 
 
 def parse_doc(
@@ -210,7 +210,7 @@ if __name__ == '__main__':
     # args
     __dir__ = os.path.dirname(os.path.abspath(__file__))
     pdf_files_dir = os.path.join(__dir__, "data")
-    output_dir = os.path.join(__dir__, "output")
+    output_dir = os.path.join(__dir__, "mineru")
 
     # total_pdf_files, using the file name
     total_pdf_files = []
