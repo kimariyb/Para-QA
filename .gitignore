@@ -174,5 +174,5 @@ cython_debug/
 .pypirc
 
 data/
-mineru/
+parahydrogen_dataset/
 logs/
