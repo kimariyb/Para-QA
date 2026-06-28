@@ -1,0 +1,22 @@
+# Core data processing
+pandas
+numpy
+tqdm
+requests
+httpx
+
+# Notebook and visualization workflows
+jupyter
+matplotlib
+seaborn
+wordcloud
+loguru
+
+# RAG / evaluation workflow
+langchain-openai
+langchain-community
+ragas
+pydantic
+
+# PDF/office document parsing workflow
+mineru

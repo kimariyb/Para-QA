@@ -1,11 +1,9 @@
-import uuid
-import json
-import pathlib
-import requests
-
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from codecs import encode
+from pathlib import Path
+from typing import Any
+
+import requests
 
 
 class ResponseMode(Enum):
@@ -14,195 +12,143 @@ class ResponseMode(Enum):
 
 
 class BaseClient(metaclass=ABCMeta):
-    def __init__(self, api_key=None, base_url=None, user=None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        user: str | None = None,
+        timeout: int = 60,
+    ) -> None:
         self.api_key = api_key
         self.base_url = base_url
         self.user = user
-    
+        self.timeout = timeout
+        self.session = requests.Session()
+
     @abstractmethod
-    def request(self, *args, **kwargs):
-        """抽象方法，必须由子类实现具体的请求逻辑"""
-        pass
-    
-    # 公共的getter方法
-    def get_api_key(self):
-        """获取当前配置的API密钥"""
+    def request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Execute the concrete API request."""
+
+    def _auth_headers(self, extra_headers: dict[str, str] | None = None) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if extra_headers:
+            headers.update(extra_headers)
+        return headers
+
+    def _request_json(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+        response.raise_for_status()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ValueError(f"Response is not valid JSON: {response.text[:200]}") from exc
+
+    def get_api_key(self) -> str | None:
         return self.api_key
-    
-    def get_base_url(self):
-        """获取当前配置的基础URL"""
+
+    def get_base_url(self) -> str | None:
         return self.base_url
-    
-    def get_user(self):
-        """获取当前配置的用户标识"""
+
+    def get_user(self) -> str | None:
         return self.user
-    
-    # 公共的setter方法
-    def set_api_key(self, api_key):
-        """设置当前配置的API密钥"""
+
+    def set_api_key(self, api_key: str) -> None:
         self.api_key = api_key
-    
-    def set_base_url(self, base_url):
-        """设置当前配置的基础URL"""
+
+    def set_base_url(self, base_url: str) -> None:
         self.base_url = base_url
-    
-    def set_user(self, user):
-        """设置当前配置的用户标识"""
+
+    def set_user(self, user: str) -> None:
         self.user = user
-        
+
 
 class FileUploadClient(BaseClient):
-    def __init__(self, api_key=None, base_url=None, user=None):
-        super().__init__(api_key, base_url, user)
-    
-    def request(self, file_path: str):
-        # 判断 file_path 是存在的
-        if not pathlib.Path(file_path).exists():
-            print(f"File not found: {file_path}")
-            return None
-        
-        # 获取文件类型
-        fileType = 'application/octet-stream'
-                
-        # 生成boundary
-        boundary = uuid.uuid4().hex
+    def request(self, file_path: str) -> dict[str, Any]:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        if self.base_url is None:
+            raise ValueError("base_url is required for file upload.")
 
-        # 构造请求参数
-        headers = {
-            "Authorization": f'Bearer {self.api_key}',
-            'Content-type': f'multipart/form-data; boundary={boundary}'
-        }
-        
-        dataList = []
-        dataList.append(encode('--' + boundary))
+        with path.open("rb") as file:
+            return self._request_json(
+                "POST",
+                self.base_url,
+                headers=self._auth_headers(),
+                data={"user": self.user or ""},
+                files={"file": (path.name, file, "application/octet-stream")},
+            )
 
-        dataList.append(encode(
-            f'Content-Disposition: form-data; name=file; filename={pathlib.Path(file_path).name}'
-        ))
 
-        dataList.append(encode('Content-Type: {}'.format(fileType)))
-        dataList.append(encode(''))
-
-        with open(file_path, 'rb') as f:
-            dataList.append(f.read())
-
-        dataList.append(encode('--' + boundary))
-
-        dataList.append(encode('Content-Disposition: form-data; user=user;'))
-        dataList.append(encode('Content-Type: {}'.format('text/plain')))
-        dataList.append(encode(''))
-
-        dataList.append(encode(self.user))
-        dataList.append(encode('--'+boundary+'--'))
-        dataList.append(encode(''))
-
-        body = b'\r\n'.join(dataList)
-
-        # 发送请求
-        response = requests.request("POST", self.base_url, headers=headers, data=body)
-        
-        # 返回响应结果
-        return response.json()
-    
-    
 class WorkFlowRunClient(BaseClient):
-    def __init__(self, api_key=None, base_url=None, user=None):
-        super().__init__(api_key, base_url, user)
-    
-    def request(self, param_name: str, upload_file_id: str, response_mode: ResponseMode = ResponseMode.BLOCKING): 
-        # 构造请求参数
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-        }
-        
-        # 构造请求体
-        data = json.dumps({
+    def request(
+        self,
+        param_name: str,
+        upload_file_id: str,
+        response_mode: ResponseMode | str = ResponseMode.BLOCKING,
+    ) -> dict[str, Any]:
+        if self.base_url is None:
+            raise ValueError("base_url is required for workflow run.")
+
+        mode = response_mode.value if isinstance(response_mode, ResponseMode) else response_mode
+        payload = {
             "inputs": {
                 param_name: {
                     "type": "document",
                     "transfer_method": "local_file",
-                    "upload_file_id": upload_file_id
+                    "upload_file_id": upload_file_id,
                 }
             },
-            "response_mode": response_mode.value,
-            "user": self.user
-        })
-        
-        # 发送请求
-        response = requests.request("POST", self.base_url, headers=headers, data=data)
-        res = response.json()
-
-        return res
-    
-    def get_info(self, id):
-        # 构造请求参数
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
+            "response_mode": mode,
+            "user": self.user,
         }
-        
-        # 发送请求
-        response = requests.request(
-            "GET", 
-            f"{self.base_url}/{id}", 
-            headers=headers
+        return self._request_json(
+            "POST",
+            self.base_url,
+            headers=self._auth_headers({"Content-Type": "application/json"}),
+            json=payload,
         )
-        
-        res = response.json()
 
-        return res
-    
-    
+    def get_info(self, run_id: str) -> dict[str, Any]:
+        if self.base_url is None:
+            raise ValueError("base_url is required for workflow run info.")
+
+        return self._request_json(
+            "GET",
+            f"{self.base_url}/{run_id}",
+            headers=self._auth_headers(),
+        )
+
+
 class WorkFlowLogClient(BaseClient):
-    def __init__(self, api_key=None, base_url=None, user=None):
-        super().__init__(api_key, base_url, user)
-        
-    def request(self, page, limit):
-        # 构造请求参数
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-        }
-        
-        # 构建 url
-        log_url = f"{self.base_url}?page={page}&limit={limit}"
-        
-        # 发送请求
-        response = requests.request(
-            "GET", log_url, headers=headers
-        )
-            
-        res = response.json()
+    def request(self, page: int, limit: int) -> dict[str, Any]:
+        if self.base_url is None:
+            raise ValueError("base_url is required for workflow logs.")
 
-        return res
-    
-    
+        return self._request_json(
+            "GET",
+            self.base_url,
+            headers=self._auth_headers(),
+            params={"page": page, "limit": limit},
+        )
+
 
 class ChatMessageClient(BaseClient):
-    def __init__(self, api_key=None, base_url=None, user=None):
-        super().__init__(api_key, base_url, user)
-        
-    def request(self, message: str):
-        # 构造请求参数
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-        }
-        
-        # 构造请求体
-        data = json.dumps({
+    def request(self, message: str) -> dict[str, Any]:
+        if self.base_url is None:
+            raise ValueError("base_url is required for chat messages.")
+
+        payload = {
             "inputs": {},
             "query": message,
             "conversation_id": "",
             "response_mode": ResponseMode.BLOCKING.value,
             "user": self.user,
-            "files": []
-        })
-        
-        # 发送请求
-        response = requests.request("POST", self.base_url, headers=headers, data=data)
-        data = json.loads(response.text)
-        
-        return data
-
-        
-
+            "files": [],
+        }
+        return self._request_json(
+            "POST",
+            self.base_url,
+            headers=self._auth_headers({"Content-Type": "application/json"}),
+            json=payload,
+        )
