@@ -1,0 +1,9 @@
+{
+  "queries": 97,
+  "corpus_units": 19641,
+  "mrr": 0.8493794923048424,
+  "ndcg": 0.8827451964658085,
+  "evidence_recall_at_1": 0.7835051546391752,
+  "evidence_recall_at_3": 0.9278350515463918,
+  "evidence_recall_at_5": 0.9278350515463918
+}

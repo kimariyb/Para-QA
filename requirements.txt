@@ -4,6 +4,8 @@ numpy
 tqdm
 requests
 httpx
+python-dotenv
+pyyaml
 
 # Notebook and visualization workflows
 jupyter
@@ -13,7 +15,9 @@ wordcloud
 loguru
 
 # RAG / evaluation workflow
+langchain
 langchain-openai
+langgraph
 langchain-community
 ragas
 pydantic

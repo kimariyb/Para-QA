@@ -36,7 +36,8 @@ The repository is intended for researchers who need a reproducible workflow for 
 | Language | Python 3.10+ |
 | Interactive workflow | Jupyter Notebook / JupyterLab |
 | Document parsing | MinerU |
-| Workflow and RAG service | Dify |
+| Workflow and RAG service | Dify (legacy v1) |
+| QAC v2 orchestration | LangChain, LangGraph, OpenAI-compatible endpoints |
 | Data processing | pandas, numpy |
 | API access | requests, httpx |
 | RAG evaluation | RAGAS, LangChain |
@@ -63,21 +64,30 @@ The repository is intended for researchers who need a reproducible workflow for 
 |   `-- *.pdf                  # Distribution plots, word clouds, and metrics plots
 |-- results/
 |   `-- qac_results_*.csv      # RAGAS evaluation results
-|-- scripts/
-|   |-- mineru_batch.py        # Batch parser for MinerU
-|   |-- preprocess_markdown.py # Markdown cleaning CLI
-|   `-- create_qac_jsonl.py    # JSONL merge and filtering CLI
-|-- utils/
-|   |-- dify.py                # Dify API client wrappers
-|   |-- parser.py              # Markdown cleaning utilities
-|   `-- __init__.py
+|-- src/                       # Application package; all domain code lives here
+|   |-- corpus/                # Source manifest and frozen evidence corpus
+|   |-- evaluation/            # Judge contracts and external-run preflight gates
+|   |-- ingestion/             # MinerU Markdown cleanup
+|   |-- integrations/          # Optional legacy service adapters
+|   |-- qac/                   # QAC generation, validation, LLM and stress logic
+|   |-- retrieval/             # BM25 implementation and reference metrics
+|   `-- cli/                   # Command-line argument parsing and I/O adapters
+|-- scripts/                   # Thin backward-compatible launchers only
 |-- generate_qac_dataset.ipynb # QAC generation and dataset preparation
 |-- evaluate_qac_dataset.ipynb # RAG evaluation workflow
+|-- pyproject.toml             # Standard Python package metadata
 |-- requirements.txt           # Python dependency list
 |-- .env.example               # Example API configuration
 |-- LICENSE
 `-- README.md
 ```
+
+The package is organized by domain responsibility, rather than by generic
+utility type. For example, QAC source validation is in
+`src.qac.validation`, while BM25 code is in `src.retrieval.bm25`.
+`scripts/` remains only for existing shell commands such as
+`python scripts/generate_qac.py`; new integrations should use
+`python -m src.cli.generate_qac` or import the relevant domain package.
 
 ## Pipeline Overview
 
@@ -140,6 +150,12 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+For editable package imports during development:
+
+```bash
+pip install -e .
+```
+
 Create a local environment file:
 
 ```bash
@@ -152,12 +168,24 @@ Fill in `.env` with the Dify endpoints and API keys for your own deployment befo
 
 | Variable | Required For | Description |
 | --- | --- | --- |
-| `DIFY_QAC_API_KEY` | QAC generation | API key for the Dify workflow that generates QAC records. |
-| `DIFY_UPLOAD_FILE_URL` | QAC generation | Dify file upload endpoint, usually ending with `/v1/files/upload`. |
-| `DIFY_WORKFLOW_RUN_URL` | QAC generation | Dify workflow execution endpoint, usually ending with `/v1/workflows/run`. |
-| `DIFY_WORKFLOW_LOG_URL` | QAC recovery | Dify workflow logs endpoint, usually ending with `/v1/workflows/logs`. |
-| `DIFY_RAG_API_KEY` | RAG evaluation | API key for the Dify chat or RAG application being evaluated. |
-| `DIFY_RAG_CHAT_URL` | RAG evaluation | Dify chat endpoint, usually ending with `/v1/chat-messages`. |
+| `QAC_LLM_BASE_URL` | QAC v2 generation | OpenAI-compatible endpoint URL for the generator/verifier models. |
+| `QAC_LLM_API_KEY` | QAC v2 generation | API key for the QAC generation endpoint. |
+| `QAC_LLM_MODEL` | QAC v2 generation | Generator model name (e.g. `gpt-4o-mini`). |
+| `QAC_LLM_VERIFIER_MODEL` | QAC v2 generation | Optional different model for QA-pair verification (defaults to the generator). |
+| `QAC_LLM_REASONING_EFFORT` | QAC v2 generation | `none` by default; disables standard OpenAI-compatible reasoning mode for generation and verification. |
+| `QAC_LLM_EXTRA_BODY_JSON` | QAC v2 generation | Optional provider-specific JSON body for disabling thinking mode. |
+| `EVAL_LLM_BASE_URL` | RAG / evaluation | OpenAI-compatible endpoint URL for RAG answer generation and evaluation (kept separate from QAC generation). |
+| `EVAL_LLM_API_KEY` | RAG / evaluation | API key for the evaluation endpoint. |
+| `EVAL_LLM_MODEL` | RAG / evaluation | Model name for RAG/evaluation calls. |
+| `JUDGE_LLM_BASE_URL` | Automated evaluation | OpenAI-compatible endpoint for the independent judge. |
+| `JUDGE_LLM_API_KEY` | Automated evaluation | API key for the independent judge endpoint. |
+| `JUDGE_LLM_MODEL` | Automated evaluation | Model distinct from the QAC generator and answer model. |
+| `DIFY_QAC_API_KEY` | QAC v1 (legacy) | API key for the Dify workflow that generates QAC records. |
+| `DIFY_UPLOAD_FILE_URL` | QAC v1 (legacy) | Dify file upload endpoint, usually ending with `/v1/files/upload`. |
+| `DIFY_WORKFLOW_RUN_URL` | QAC v1 (legacy) | Dify workflow execution endpoint, usually ending with `/v1/workflows/run`. |
+| `DIFY_WORKFLOW_LOG_URL` | QAC v1 (legacy) | Dify workflow logs endpoint, usually ending with `/v1/workflows/logs`. |
+| `DIFY_RAG_API_KEY` | RAG v1 (legacy) | API key for the Dify chat or RAG application being evaluated. |
+| `DIFY_RAG_CHAT_URL` | RAG v1 (legacy) | Dify chat endpoint, usually ending with `/v1/chat-messages`. |
 | `DIFY_USER` | All Dify requests | Stable user identifier sent with API requests. |
 
 Do not commit real API keys. Keep secrets in `.env`, your shell environment, or a local secret manager.
@@ -200,7 +228,26 @@ The cleaner stops when it reaches headings that usually mark non-content section
 
 ### 3. Generate the QAC Dataset
 
-Open the QAC generation notebook:
+**QAC v2 (recommended, pure code, no Dify)** — publication-grade pipeline with
+evidence grounding, LLM verification, round-trip checks, deduplication, and
+document-level leakage-free splits:
+
+```bash
+# Offline end-to-end validation with a deterministic mock LLM
+python scripts/generate_qac.py --dry-run --limit 8 -o outputs/qac_dryrun
+
+# Real generation against any OpenAI-compatible endpoint
+export LLM_BASE_URL=...   # e.g. https://api.openai.com/v1
+export LLM_API_KEY=...
+export LLM_MODEL=gpt-4o-mini
+python scripts/generate_qac.py -i data/cleaned -o outputs/qac --limit 100
+```
+
+See `docs/qac_v2.md` for the methodology, silver-dataset schema, and automated
+validation protocol. The publication study is specified in
+`docs/research_design_v1.md`. Unit tests: `python tests/test_qacgen.py`.
+
+**QAC v1 (legacy, Dify-based)** — open the QAC generation notebook:
 
 ```bash
 jupyter lab generate_qac_dataset.ipynb
@@ -269,16 +316,18 @@ The evaluation notebook:
 | --- | --- |
 | `python scripts/mineru_batch.py --help` | Show MinerU batch parsing options. |
 | `python scripts/preprocess_markdown.py --help` | Show Markdown preprocessing options. |
-| `python scripts/create_qac_jsonl.py --help` | Show QAC JSONL merge options. |
-| `python -m compileall scripts utils` | Check Python syntax for scripts and utility modules. |
+| `python -m src.cli.generate_qac --help` | Show the primary QAC CLI options. |
+| `python -m compileall src scripts` | Check package and compatibility-wrapper syntax. |
 | `jupyter lab generate_qac_dataset.ipynb` | Open the QAC generation workflow. |
 | `jupyter lab evaluate_qac_dataset.ipynb` | Open the RAG evaluation workflow. |
 
 ## Development Notes
 
 - Run scripts from the repository root so relative paths such as `data/markdown` and `outputs/qac_dataset.jsonl` resolve correctly.
-- `utils.dify` contains lightweight wrappers for Dify upload, workflow, log, and chat endpoints.
-- `utils.parser.MarkdownProcessor` contains the Markdown section-truncation logic.
+- `src.integrations.dify` contains legacy Dify upload, workflow, log, and chat adapters.
+- `src.ingestion.markdown.MarkdownProcessor` cleans MinerU Markdown: terminal truncation at reference headings, section-level drops for metadata sections, and paragraph rules for reference blobs, keywords, copyright, watermarks, and page artifacts.
+- `src.qac.llm` provides a LangChain `ChatOpenAI` factory, `UsageTracker`, and deterministic `PassageFakeChatModel` for offline tests.
+- `src.qac.generation` implements the LangGraph QAC flow (generate → deterministic QC → LLM verification → round-trip), while validation and stress fixtures live in their own QAC modules.
 - Notebooks may still contain local endpoint examples or experiment-specific constants. Replace those values with your own environment variables before rerunning API calls.
 - The project stores research artifacts directly in `outputs/`, `results/`, and `logs/` so that experiments can be inspected after execution.
 

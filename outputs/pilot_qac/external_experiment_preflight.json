@@ -1,0 +1,14 @@
+{
+  "run_id": "study-v1",
+  "qac": "outputs/pilot_qac/qac_test.jsonl",
+  "corpus": "outputs/pilot_qac/evidence_corpus_all.jsonl",
+  "budget_usd": 1.0,
+  "ready": false,
+  "errors": [
+    "EVAL_LLM_API_KEY is required",
+    "JUDGE_LLM_BASE_URL is required",
+    "JUDGE_LLM_API_KEY is required",
+    "QAC_LLM_VERIFIER_MODEL is required",
+    "JUDGE_LLM_MODEL is required"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "files": 644,
+  "reduction_pct": 23.617753950835652,
+  "image_lines": 4420,
+  "received": 176,
+  "section_dropped": 2007,
+  "paragraph_dropped_with_section": 2925,
+  "terminal_cut": 474,
+  "chars_in": 30813671,
+  "chars_out": 23536174,
+  "keywords": 108,
+  "image": 419,
+  "doi_url": 31,
+  "ref_blob": 69,
+  "copyright": 80,
+  "copyright_heading": 1,
+  "drop_heading_title": 33,
+  "drop_heading": 128,
+  "empty_heading": 1,
+  "abstract_rescued": 30,
+  "footer_cite": 87,
+  "junk_label": 122
+}

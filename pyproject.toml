@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "para-qa"
+version = "0.1.0"
+description = "Evidence-grounded QAC construction and RAG evaluation for PHIP literature"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = [
+  "src",
+  "src.cli",
+  "src.corpus",
+  "src.evaluation",
+  "src.ingestion",
+  "src.integrations",
+  "src.qac",
+  "src.retrieval",
+]

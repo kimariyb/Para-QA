@@ -1,0 +1,8 @@
+{
+  "queries": 97,
+  "mrr": 0.9664948453608248,
+  "ndcg": 0.9751064466590792,
+  "evidence_recall_at_1": 0.9381443298969072,
+  "evidence_recall_at_3": 0.9896907216494846,
+  "evidence_recall_at_5": 1.0
+}
